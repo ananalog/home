@@ -1,141 +1,172 @@
-# 03. Сервер, Telegram Mini App, бот, CLI
+# 03. Сервер (.NET), Telegram Mini App, бот, CLI
 
 ## Сервер (`home-server`)
 
-Один бинарник Go. Подкоманды одного бинарника:
-`home serve` — сервер, `home ctl …` (он же симлинк `homectl`) — CLI, `home sim` — эмулятор устройств.
+**C#, .NET 10 (LTS), ASP.NET Core.** Один процесс: HTTP API, SignalR, gateway устройств, бот, фоновые задачи.
+Публикуется как self-contained single-file для `linux-x64` — на сервере .NET-рантайм ставить не нужно.
 
-### Структура пакетов (репозиторий `home`)
+### Структура решения
 
 ```
-cmd/home/                 main: serve | ctl | sim | migrate | backup
-internal/gateway/         TCP :7700, Noise-сессии, маршрутизация сообщений, ping
-internal/discovery/       mDNS-анонс _home._tcp, ответ на UDP DISCOVER
-internal/registry/        устройства, точки, комнаты, принятие
-internal/telemetry/       приём REPORT, запись истории, агрегации
-internal/ota/             хранилище прошивок, парсинг образов, задания раскатки
-internal/api/             REST + WebSocket, OpenAPI
-internal/auth/            Telegram initData, токены CLI, роли
-internal/bot/             Telegram-бот: уведомления, кнопка открытия Mini App
-internal/rules/           автоматизации (этап 2)
-internal/store/           SQLite, миграции
-pkg/client/               Go-клиент API (используется CLI и интеграционными тестами)
-web/miniapp/              Svelte-приложение, собирается в web/dist и встраивается через embed
-deploy/                   systemd-юниты, скрипты (см. 07)
+home-server/
+  Home.sln
+  external/home-protocol/            сабмодуль: сгенерированный Home.Protocol (C#) + тест-векторы
+  src/
+    Home.Server/                     ASP.NET Core хост
+      Program.cs                     Kestrel: :8080 HTTP, :7700 TCP (ConnectionHandler)
+      Gateway/                       DeviceConnectionHandler, DeviceSession, фреймы, ping
+      Discovery/                     mDNS-анонс _home._tcp, UDP DISCOVER
+      Devices/                       реестр, принятие, точки
+      Telemetry/                     приём REPORT, история, агрегации (BackgroundService)
+      Ota/                           хранилище образов, парсинг дескриптора, задания раскатки
+      Api/                           Minimal API endpoints, SignalR Hub
+      Auth/                          Telegram initData, токены CLI, роли
+      Bot/                           Telegram.Bot, long polling, уведомления
+      Data/                          EF Core DbContext, миграции (SQLite)
+      wwwroot/                       собранный Mini App (из web/miniapp)
+    Home.Client/                     типизированный клиент API (используется CLI и тестами)
+    Home.Cli/                        homectl (System.CommandLine + Spectre.Console), Native AOT
+    Home.Simulator/                  эмулятор устройств по протоколу
+  web/miniapp/                       Svelte + Vite + TS
+  tests/
+    Home.Protocol.Tests/             тест-векторы
+    Home.Server.Tests/               юнит-тесты
+    Home.Integration.Tests/          сервер (WebApplicationFactory) + эмуляторы + Home.Client
 ```
 
-### Хранение
+### Ключевые детали реализации
 
-SQLite в режиме WAL, файл `/var/lib/home/home.db`.
+- **TCP-gateway в Kestrel**: `options.ListenAnyIP(7700, l => l.UseConnectionHandler<DeviceConnectionHandler>())`.
+  Чтение фреймов через `PipeReader` без лишних аллокаций, одна `DeviceSession` на соединение,
+  исходящие — через `Channel<T>`; запрос-ответ по `req_id` через `TaskCompletionSource` с таймаутом.
+- **Живые данные в Mini App** — SignalR-хаб `/hub`: значения, online/offline, прогресс OTA, события, логи.
+- **Фоновые задачи** — `BackgroundService`: даунсэмплинг истории, OTA-раскатка, проверка «оффлайн > N минут», бэкап.
+- **Конфиг** — `appsettings.json` + `/etc/home/appsettings.Production.json` + переменные окружения;
+  токен бота — из файла (`/etc/home/secrets/bot_token`).
+- **Логи** — стандартный `ILogger` → journald (systemd), при желании Serilog.
+
+### Хранение (SQLite, EF Core)
 
 | Таблица | Содержимое |
 |---|---|
-| `devices` | `device_id`, модель, имя, комната, публичный ключ, статус (`pending/adopted/blocked`), последняя версия, last_seen |
-| `points` | описание точек по `(model, fw_version)` |
-| `samples_raw` | `(device, point, ts, value)` — 7 дней |
-| `samples_1m` / `samples_1h` | min/max/avg — 90 дней / бессрочно |
-| `firmware` | модель, версия, sha256, размер, путь к файлу, changelog, канал (`stable/beta`) |
-| `ota_jobs` | задания: устройства, статус, прогресс, ошибки |
-| `users` | telegram_id, имя, роль (`admin`/`user`/`viewer`) |
-| `tokens` | токены CLI (хэш), описание, срок |
-| `events` / `audit` | события устройств и журнал действий пользователей (кто что переключил/прошил) |
+| `Devices` | `DeviceId`, модель, имя, комната, статус (`New/Adopted/Blocked`), версия прошивки, IP, LastSeen |
+| `PointDefs` | описание точек по `(Model, FwVersion)` |
+| `SamplesRaw` | `(Device, Point, Ts, Value)` — 7 дней |
+| `Samples1m` / `Samples1h` | min/max/avg — 90 дней / бессрочно |
+| `Firmware` | модель, версия, sha256, размер, путь к файлу, changelog, канал |
+| `OtaJobs` / `OtaJobItems` | задания раскатки, статус по устройствам |
+| `Users` | `TelegramId` (= chat id личного чата), имя, роль, кто и когда добавил |
+| `AccessRequests` | запросы доступа от незнакомых пользователей бота |
+| `ApiTokens` | токены CLI (хэш), имя, срок |
+| `Events` / `Audit` | события устройств и журнал действий пользователей |
 
-Даунсэмплинг — фоновой задачей раз в минуту/час. Для десятков датчиков это мегабайты в год.
+Для истории — сырые данные в `SamplesRaw` пишутся пачками (раз в секунду), чтобы не делать транзакцию на каждое значение.
 
 ### HTTP API
 
-`/api/v1`, JSON, описан в OpenAPI (`api/openapi.yaml`) → из него генерируется TS-клиент для Mini App.
+`/api/v1`, JSON, OpenAPI генерируется ASP.NET Core (`Microsoft.AspNetCore.OpenApi`) → из него TS-клиент для Mini App.
 
 ```
 GET    /devices                      список (+ текущие значения, онлайн)
 GET    /devices/{id}                 описание, точки, сетевой статус
 PATCH  /devices/{id}                 имя, комната
-POST   /devices/{id}/adopt|reject    принятие
+POST   /devices/{id}/adopt|reject
 DELETE /devices/{id}
 POST   /devices/{id}/points/{key}    {value}  — SET
 POST   /devices/{id}/actions/{key}   {args}   — INVOKE
 POST   /devices/{id}/reboot|identify|factory-reset
+PUT    /devices/{id}/network         DHCP/статика
 GET    /devices/{id}/history?point=co2&from=&to=&step=
-GET    /devices/{id}/logs            (live — через WS)
 GET/POST /rooms
-GET    /firmware                     список образов
-POST   /firmware                     загрузка .bin (multipart)
-POST   /ota/jobs                     {firmware_id, devices[] | model, strategy}
-GET    /ota/jobs/{id}
-GET/POST/DELETE /users, /tokens
-GET    /system                       версия, аптайм, место на диске, статус туннеля
-GET    /ws                           поток: values, online/offline, ota progress, events, logs
-GET    /healthz
+GET    /firmware ; POST /firmware (multipart .bin)
+POST   /ota/jobs ; GET /ota/jobs/{id}
+GET/POST/PATCH/DELETE /users         управление доступом (admin)
+GET    /access-requests ; POST /access-requests/{id}/approve|deny
+GET/POST/DELETE /tokens
+GET    /system ; GET /healthz
 ```
 
 ### Раскатка OTA
 
-- Стратегии: одно устройство; все устройства модели; «канарейка» — сначала одно,
-  после его успешного `HELLO` с новой версией — остальные по N штук.
-- Перед отправкой сервер проверяет: модель в дескрипторе образа = модель устройства,
-  `hw_rev` входит в список поддерживаемых, образ не меньше/не больше раздела.
-- Результат: устройство вернулось с новой версией → `done`; вернулось со старой
-  (сработал откат) → `rolled_back`, уведомление в бот.
+- Стратегии: одно устройство; все устройства модели; «канарейка» — сначала одно, после успешного `HELLO`
+  с новой версией — остальные по N штук.
+- Перед отправкой: модель в дескрипторе образа = модель устройства, `hw_rev` поддерживается, образ влезает в слот.
+- Вернулось с новой версией → `Done`; со старой (сработал откат) → `RolledBack`, уведомление в бот.
 
-## Доступ к Mini App извне
+## Доступ снаружи: белый IP + DuckDNS
 
-Mini App открывается в WebView Telegram на телефоне пользователя — **ему нужен HTTPS-адрес,
-доступный с телефона**, в том числе вне дома.
+Mini App открывается в WebView Telegram на телефоне — нужен HTTPS-адрес, доступный из интернета.
 
-| Вариант | Плюсы | Минусы |
-|---|---|---|
-| **Cloudflare Tunnel** (рекомендуется) | бесплатно, без белого IP и проброса портов, HTTPS автоматически, можно добавить Cloudflare Access | нужен домен в Cloudflare; трафик идёт через CF |
-| VPS + WireGuard + Caddy | полный контроль | платный VPS, больше настройки |
-| Tailscale Funnel | просто | домен `*.ts.net`, ограничения |
-| Только дома: домен → LAN-IP + сертификат Let's Encrypt через DNS-01 | ничего не торчит наружу | не работает вне домашней сети |
+```
+телефон → https://myhome.duckdns.org (белый IP) → роутер :443 → сервер Caddy :443 → Kestrel 127.0.0.1:8080
+```
 
-Бот использует **long polling** — входящие соединения ему не нужны вообще.
-Порт устройств 7700 наружу **никогда** не публикуется: туннель проксирует только HTTP `:8080`.
+- **DuckDNS**: домен `<имя>.duckdns.org` → ваш белый IP. Обновление IP — systemd-таймер раз в 5 минут
+  (`curl "https://www.duckdns.org/update?domains=<имя>&token=<token>&ip="`), даже если IP статический — на случай смены.
+- **Caddy** получает и продлевает сертификат Let's Encrypt сам. На роутере пробросить **443/tcp**
+  (TLS-ALPN-01) и желательно **80/tcp** (HTTP-01 + редирект на HTTPS). Если провайдер закрывает 80/443 —
+  сертификат получается через DNS-01 по API DuckDNS (Caddy с плагином `caddy-dns/duckdns`),
+  а Mini App открывается по нестандартному порту: `https://myhome.duckdns.org:8443`.
+- Kestrel слушает HTTP **только на 127.0.0.1:8080** (и на LAN для локального CLI по желанию); наружу — только через Caddy.
+- **Дома через Wi-Fi**: телефон резолвит домен в белый IP; роутер должен уметь NAT loopback (hairpin).
+  Если не умеет — на роутере/в локальном DNS прописать `myhome.duckdns.org → LAN-IP сервера`, сертификат останется валидным.
+- Бот использует long polling — входящие соединения ему не нужны.
+- Защита публичного входа: всё API только с авторизацией, rate limiting (встроенный `Microsoft.AspNetCore.RateLimiting`),
+  отдельного фронта для порта 7700 нет, SSH наружу не пробрасывается.
 
-## Авторизация
+## Авторизация и пользователи
 
-- **Mini App:** при открытии приложение отправляет `Telegram.WebApp.initData`. Сервер проверяет
-  подпись: `secret = HMAC_SHA256(key="WebAppData", msg=bot_token)`,
-  `hash == HMAC_SHA256(key=secret, msg=data_check_string)`, и свежесть `auth_date` (≤ 1 час).
-  Затем ищет `user.id` в таблице `users` → выдаёт короткоживущий токен сессии.
-- **Роли:** `admin` — всё (принятие, OTA, сброс, пользователи); `user` — управление и просмотр;
-  `viewer` — только просмотр.
-- **Первый администратор:** `homectl users add <telegram_id> --role admin` на сервере
-  или `HOME_BOOTSTRAP_ADMIN` в конфиге.
-- **CLI:** на самом сервере — через unix-сокет `/run/home/api.sock` (доступ по группе `home`,
-  токен не нужен); с ноутбука — по HTTP с токеном (`homectl login --server … --token …`).
+- **Mini App:** при открытии отправляет `Telegram.WebApp.initData`. Сервер проверяет подпись:
+  `secret = HMAC_SHA256(key="WebAppData", msg=bot_token)`, `hash == HMAC_SHA256(key=secret, msg=data_check_string)`,
+  и свежесть `auth_date`. Затем ищет `user.id` в `Users` → выдаёт токен сессии.
+- **Кого пускать решает CLI (и Mini App для админов).** Идентификатор — Telegram user id; в личном чате с ботом
+  `chat_id` совпадает с `user_id`, поэтому «добавить chat id» и «добавить пользователя» — одно и то же.
+
+```
+homectl users add 123456789 --name "Маша" --role user
+homectl users list
+homectl users role 123456789 admin
+homectl users remove 123456789
+```
+
+- **Как узнать свой id:** написать боту `/start` — незнакомому пользователю бот отвечает
+  «Ваш id 123456789, доступа нет, запрос отправлен администраторам», создаёт `AccessRequest`
+  и шлёт админам сообщение с кнопками «Разрешить / Отклонить». Или админ: `homectl users requests` → `homectl users approve <id>`.
+- **Роли:** `admin` — всё (принятие устройств, OTA, сброс, пользователи); `user` — управление и просмотр; `viewer` — только просмотр.
+- **Первый администратор** — на сервере: `homectl users add <id> --role admin`
+  (локальный CLI работает через unix-сокет `/run/home/api.sock` без токена, доступ — группа `home`).
+- **CLI с другого компьютера:** `homectl login --server https://myhome.duckdns.org --token <токен>`,
+  токен создаёт админ: `homectl tokens create --name laptop`.
 
 ## Mini App: экраны и UX
 
-Принципы: крупные плитки, минимум текста, тема и цвета Telegram (`themeParams`),
-нативные `BackButton`/`MainButton`, тактильная отдача (`HapticFeedback`) при переключении,
-живые значения через WebSocket, работа одной рукой.
+Принципы: крупные плитки, минимум текста, тема Telegram (`themeParams`), нативные `BackButton`/`MainButton`,
+`HapticFeedback` при переключении, живые значения через SignalR, работа одной рукой.
 
-1. **Дом** — вкладки комнат; плитки устройств: главное значение крупно, цвет по порогам,
-   тап по переключателю — мгновенное действие (оптимистичное обновление), серая плитка — оффлайн.
-2. **Устройство** — все точки по описанию (датчики, переключатели, слайдеры, кнопки действий),
-   график 24ч/7д/30д (uPlot), «расширенные» настройки свёрнуты, инфо: версия, IP, RSSI, аптайм.
-3. **Новые устройства** — баннер «Найдено новое устройство», код сверки, «Принять», выбор комнаты и имени.
-4. **Прошивки** (admin) — список образов по моделям, загрузка `.bin` из файла,
-   «Обновить все CO2 до 1.3.0», прогресс по каждому устройству.
-5. **Настройки** — пользователи, уведомления (пороги CO2, оффлайн > N минут), о системе.
+1. **Дом** — вкладки комнат; плитки: главное значение крупно, цвет по порогам, переключатели прямо на плитке
+   (оптимистичное обновление), серая плитка — оффлайн.
+2. **Устройство** — все точки по описанию, график 24ч/7д/30д (uPlot), «расширенные» свёрнуты, инфо: версия, IP, RSSI, аптайм.
+3. **Новые устройства** — «Найдено новое устройство» → «Принять», комната, имя; «Мигнуть» чтобы понять, какое это.
+4. **Прошивки** (admin) — образы по моделям, загрузка `.bin`, «Обновить все CO2 до 1.3.0», прогресс по каждому.
+5. **Настройки** — пользователи и запросы доступа, уведомления (пороги CO2, оффлайн > N минут), о системе.
 
 ## Telegram-бот
 
 - Кнопка меню → открыть Mini App.
-- Уведомления: превышение порогов, устройство оффлайн, OTA завершено/откатилось, новое устройство.
-- Пара текстовых команд на случай, если WebView недоступен: `/status`, `/co2`.
+- Уведомления: пороги, оффлайн, OTA завершено/откатилось, новое устройство, запрос доступа.
+- Текстовые команды на всякий случай: `/start`, `/status`, `/co2`, `/id`.
 
 ## CLI `homectl`
 
 Работает через тот же API → паритет с Mini App гарантирован. Вывод — таблицы, `--json` для скриптов.
+Публикуется Native AOT (один маленький бинарник, мгновенный старт).
 
 ```
-homectl login --server https://home.example.com --token …
-homectl devices list [--room kitchen] [--offline]
+homectl login --server https://myhome.duckdns.org --token …
+homectl devices list [--room kitchen] [--offline] [--new]
 homectl devices show <dev>
 homectl devices rename <dev> "Спальня CO2" ; devices move <dev> bedroom
-homectl devices adopt <dev> [--code 1234] ; devices reject <dev> ; devices remove <dev>
+homectl devices adopt <dev> ; devices reject <dev> ; devices remove <dev>
 homectl get <dev> [point...]
 homectl set <dev> <point> <value>               # homectl set relay-1 power on
 homectl invoke <dev> <action> [k=v ...]         # homectl invoke co2-a1b2 calibrate ppm=420
@@ -146,23 +177,18 @@ homectl reboot|identify <dev>
 homectl factory-reset <dev> --mode settings|firmware|all
 homectl net <dev> --dhcp | --ip 192.168.1.50/24 --gw 192.168.1.1 --dns 192.168.1.1
 homectl fw list
-homectl fw upload dist/co2-egg-1.3.0.bin [--channel beta]
+homectl fw upload co2-egg-1.3.0.bin [--channel beta]
 homectl fw flash <dev...> --version 1.3.0 | --model co2-egg --all [--canary]
 homectl fw status [<job>]
 homectl rooms list|add|remove
-homectl users list|add <tg_id> --role admin|remove
-homectl tokens create --name laptop | revoke
+homectl users list|add|remove|role|requests|approve|deny
+homectl tokens create|list|revoke
 homectl system status ; homectl backup ./home-backup.db
-homectl sim co2-egg --count 3                    # эмулятор устройств для разработки
+homectl completion bash|zsh|fish
 ```
 
-Автодополнение для bash/zsh/fish (cobra генерирует).
+## Эмулятор устройств (`Home.Simulator`)
 
-## Эмулятор устройств (`home sim`)
-
-Go-реализация устройства по тому же протоколу: подключается к серверу, отдаёт описание
-точек, шлёт правдоподобную телеметрию, принимает команды и даже OTA (проверяет хэш).
-Нужен, чтобы:
-- разрабатывать сервер и Mini App без железа;
-- гонять интеграционные тесты в CI (сервер + 10 эмуляторов + сценарии через `pkg/client`);
-- проверять поведение при обрывах связи и OTA-сбоях.
+Реализация устройства на C# по тому же протоколу: подключается к серверу, отдаёт описание точек,
+шлёт правдоподобную телеметрию, принимает команды и OTA (проверяет хэш). Для разработки без железа,
+интеграционных тестов в CI и проверки обрывов связи / OTA-сбоев.
