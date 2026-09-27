@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 610" font-family="'IBM Plex Mono', ui-monospace, 'DejaVu Sans Mono', monospace" font-size="13" role="img" aria-label="Схема электрическая принципиальная датчика CO2: плата ESP32-C3 Egg, преобразователь уровней, ACD1200">
+<style>
+.bg{fill:var(--sch-paper,#fbfcfa)}
+.blk{fill:var(--sch-block,#eef3f0);stroke:var(--sch-ink,#1d2b28);stroke-width:1.6}
+.sub{fill:var(--sch-paper,#fbfcfa);stroke:var(--sch-muted,#5f706b);stroke-width:1.2;stroke-dasharray:5 4}
+.sym{fill:none;stroke:var(--sch-ink,#1d2b28);stroke-width:1.6;stroke-linecap:round}
+.symf{fill:var(--sch-block,#eef3f0);stroke:var(--sch-ink,#1d2b28);stroke-width:1.6}
+.w{fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.v5{stroke:var(--sch-v5,#c2362b)}.v33{stroke:var(--sch-v33,#b26a00)}.sda{stroke:var(--sch-sda,#1c6db0)}
+.scl{stroke:var(--sch-scl,#7047b5)}.gnd{stroke:var(--sch-gnd,#33403d)}.aux{stroke:var(--sch-muted,#5f706b)}
+.d5{fill:var(--sch-v5,#c2362b)}.d33{fill:var(--sch-v33,#b26a00)}.dsda{fill:var(--sch-sda,#1c6db0)}
+.dscl{fill:var(--sch-scl,#7047b5)}.dgnd{fill:var(--sch-gnd,#33403d)}
+.t{fill:var(--sch-ink,#1d2b28)}.m{fill:var(--sch-muted,#5f706b);font-size:11px}
+.h{fill:var(--sch-ink,#1d2b28);font-size:14px;font-weight:600}
+.b{font-weight:600}.c{text-anchor:middle}.e{text-anchor:end}
+</style>
+<rect class="bg" width="1000" height="610"/>
+
+<!-- ===== A1: плата ESP32-C3 Egg ===== -->
+<text class="h" x="40" y="80">A1  ESP32-C3 Egg (THE.EGG)</text>
+<rect class="blk" x="40" y="90" width="260" height="440" rx="4"/>
+<!-- USB-C и LDO -->
+<rect class="sub" x="56" y="114" width="76" height="32" rx="3"/>
+<text class="t c" x="94" y="134">USB-C</text>
+<path class="w v5" d="M132 130H300M212 130V180"/>
+<circle class="d5" cx="212" cy="130" r="3.8"/>
+<rect class="symf" x="180" y="180" width="64" height="40" rx="2"/>
+<text class="t c b" x="212" y="205">LDO</text>
+<path class="w v33" d="M244 200H300"/>
+<!-- OLED -->
+<rect class="sub" x="184" y="234" width="100" height="36" rx="3"/>
+<text class="m c" x="234" y="249">OLED 72×40</text>
+<text class="m c" x="234" y="263">SSD1306 0x3C</text>
+<path class="w sda" d="M214 270V300"/><path class="w scl" d="M254 270V360"/>
+<circle class="dsda" cx="214" cy="300" r="3.8"/><circle class="dscl" cx="254" cy="360" r="3.8"/>
+<!-- MCU -->
+<rect class="symf" x="56" y="280" width="102" height="190" rx="2"/>
+<text class="t b" x="64" y="332">ESP32-C3</text>
+<text class="m" x="64" y="347">4 МБ flash</text>
+<text class="m e" x="152" y="304">IO5</text><text class="m e" x="152" y="364">IO6</text>
+<text class="m e" x="152" y="414">IO8</text><text class="m e" x="152" y="449">IO9</text>
+<path class="w sda" d="M158 300H300"/><path class="w scl" d="M158 360H300"/>
+<!-- LED IO8, активный 0 -->
+<path class="w aux" d="M158 410H198M212 410H228"/>
+<path class="sym" d="M212 402L198 410L212 418ZM198 402V418"/>
+<text class="m" x="234" y="414">LED</text>
+<!-- BOOT IO9 -->
+<path class="w aux" d="M158 445H200M226 445H240V453"/>
+<path class="sym" d="M200 445L222 434"/>
+<path class="sym" d="M232 453H248M235 457H245M238 461H242"/>
+<text class="m c" x="214" y="470">BOOT</text>
+<!-- GND -->
+<path class="w gnd" d="M100 470V490H300"/>
+<!-- названия выводов A1 -->
+<text class="t e b" x="294" y="123">V5</text>
+<text class="t e b" x="294" y="193">3V3</text>
+<text class="t e b" x="294" y="293">SDA</text>
+<text class="t e b" x="294" y="353">SCL</text>
+<text class="t e b" x="294" y="483">GND</text>
+
+<!-- ===== шина +5 В сверху ===== -->
+<path class="w v5" d="M300 130H340V60H720V130"/>
+<text class="t b" x="480" y="52" style="fill:var(--sch-v5,#c2362b)">+5 В (USB)</text>
+
+<!-- ===== A1 → A2 ===== -->
+<path class="w v33" d="M300 200H410"/>
+<text class="m c" x="355" y="193" style="fill:var(--sch-v33,#b26a00)">+3,3 В</text>
+<path class="w sda" d="M300 300H410"/>
+<path class="w scl" d="M300 360H410"/>
+<path class="w gnd" d="M300 490H410M370 490V504"/>
+<circle class="dgnd" cx="370" cy="490" r="3.8"/>
+<path class="sym" d="M358 504H382M363 509H377M367 514H373"/>
+
+<!-- ===== A2: преобразователь уровней ===== -->
+<text class="h" x="410" y="90">A2  Преобразователь уровней</text>
+<rect class="blk" x="410" y="100" width="240" height="430" rx="4"/>
+<text class="t b" x="416" y="193">LV</text>
+<text class="t b" x="416" y="293">LV1</text>
+<text class="t b" x="416" y="353">LV2</text>
+<text class="t b" x="416" y="483">GND</text>
+<text class="t e b" x="644" y="123">HV</text>
+<text class="t e b" x="644" y="293">HV1</text>
+<text class="t e b" x="644" y="353">HV2</text>
+<text class="t e b" x="644" y="483">GND</text>
+<!-- LV-шина, R1 -->
+<path class="w v33" d="M410 200H530V282M470 200V225"/>
+<circle class="d33" cx="470" cy="200" r="3.8"/>
+<rect class="symf" x="464" y="225" width="12" height="40"/>
+<text class="m" x="481" y="250">10k</text>
+<!-- канал 1: Q1 BSS138 -->
+<path class="w sda" d="M470 265V300M410 300H515V291M545 291V300H650"/>
+<circle class="dsda" cx="470" cy="300" r="3.8"/>
+<path class="sym" d="M510 282H550"/>
+<path class="sym" style="stroke-width:2.4" d="M510 290H520M525 290H535M540 290H550"/>
+<text class="m c" x="530" y="322">Q1 BSS138</text>
+<!-- HV-шина, R2 -->
+<path class="w v5" d="M650 130H600V215"/>
+<rect class="symf" x="594" y="215" width="12" height="40"/>
+<text class="m e" x="588" y="240">10k</text>
+<path class="w sda" d="M600 255V300"/>
+<circle class="dsda" cx="600" cy="300" r="3.8"/>
+<!-- канал 2 -->
+<path class="w scl" d="M410 360H486M574 360H650"/>
+<rect class="sub" x="486" y="342" width="88" height="36" rx="3"/>
+<text class="m c" x="530" y="364">как канал 1</text>
+<!-- земля -->
+<path class="w gnd" d="M410 490H650"/>
+<text class="m c" x="530" y="420">4 канала, заняты 2</text>
+<text class="m c" x="530" y="438">LV = 3,3 В · HV = 5 В</text>
+
+<!-- ===== A2 → A3 ===== -->
+<path class="w v5" d="M650 130H800M760 130V156M760 168V184"/>
+<circle class="d5" cx="720" cy="130" r="3.8"/><circle class="d5" cx="760" cy="130" r="3.8"/>
+<path class="sym" d="M748 156H772"/>
+<path class="sym" style="stroke-width:3" d="M748 168H772"/>
+<text class="m" x="777" y="160">+</text>
+<path class="sym" d="M750 184H770M754 189H766M758 194H762"/>
+<text class="t e" x="742" y="162">C1</text>
+<text class="m e" x="742" y="178">100 мкФ</text>
+<path class="w sda" d="M650 300H800"/>
+<path class="w scl" d="M650 360H800"/>
+<path class="w gnd" d="M650 490H800"/>
+<path class="w aux" d="M800 420H772"/>
+<path class="sym" d="M766 414L778 426M766 426L778 414"/>
+<text class="m e" x="760" y="424">не подкл.</text>
+
+<!-- ===== A3: ACD1200 ===== -->
+<text class="h" x="800" y="90">A3  ASAIR ACD1200</text>
+<rect class="blk" x="800" y="100" width="160" height="430" rx="4"/>
+<text class="m e" x="794" y="123">4</text><text class="m e" x="794" y="293">1</text>
+<text class="m e" x="794" y="353">2</text><text class="m e" x="794" y="413">5</text>
+<text class="m e" x="794" y="483">3</text>
+<text class="t b" x="808" y="134">VCC</text>
+<text class="t b" x="808" y="304">SDA</text>
+<text class="t b" x="808" y="364">SCL</text>
+<text class="t b" x="808" y="424">SET</text>
+<text class="t b" x="808" y="494">GND</text>
+<text class="t c b" x="890" y="176">NDIR CO₂</text>
+<text class="m c" x="890" y="196">I2C · 0x2A</text>
+<text class="m c" x="890" y="212">≤ 100 кГц</text>
+<text class="m c" x="890" y="232">5 В, до 45 мА</text>
+<text class="m c" x="890" y="252">SDA/SCL: 4,7 кОм</text>
+<text class="m c" x="890" y="268">к 5 В внутри</text>
+<text class="m c" x="890" y="450">SET не подкл. = I2C</text>
+<text class="m c" x="890" y="512">6–9: не подкл.</text>
+
+<!-- ===== легенда и основная надпись ===== -->
+<g font-size="12">
+<path class="w v5" d="M40 572H64"/><text class="t" x="70" y="576">+5 В</text>
+<path class="w v33" d="M126 572H150"/><text class="t" x="156" y="576">+3,3 В</text>
+<path class="w sda" d="M228 572H252"/><text class="t" x="258" y="576">SDA</text>
+<path class="w scl" d="M304 572H328"/><text class="t" x="334" y="576">SCL</text>
+<path class="w gnd" d="M380 572H404"/><text class="t" x="410" y="576">GND</text>
+<circle class="dgnd" cx="470" cy="572" r="3.8"/><text class="t" x="480" y="576">соединение</text>
+</g>
+<rect class="sub" style="stroke-dasharray:none" x="620" y="548" width="340" height="48"/>
+<path class="sym" style="stroke-width:1.2" d="M880 548V596"/>
+<text class="t b" x="632" y="568">CO2-egg · датчик CO₂</text>
+<text class="m" x="632" y="586">Схема электрическая принципиальная</text>
+<text class="t c b" x="920" y="568">Э3</text>
+<text class="m c" x="920" y="586">лист 1</text>
+</svg>
