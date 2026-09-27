@@ -40,6 +40,7 @@ components/
   drivers/
     acd1200/  scd4x/  ssd1306/  button/ ...
 devices/
+  board-probe/       тестовая прошивка: объём flash, сканер I2C, светодиод, кнопка — проверка новой платы
   co2-egg/
     main/ main.c board.h points.c display.c
     partitions.csv
