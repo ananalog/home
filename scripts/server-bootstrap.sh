@@ -10,11 +10,14 @@
 #   --admin ID          Telegram id of the first admin (write /id to the bot to learn it)
 #   --firewall          install nftables rules (SSH stays open; devices/API only from the LAN)
 #   --lan CIDR          home network (default: detected from the default route)
+#   --https-port N      external HTTPS port (default 443). If 443 is used by another application,
+#                       take e.g. 8443: the certificate is then obtained through DuckDNS DNS
+#                       (no need for ports 80/443), the Mini App address becomes https://X.duckdns.org:N
 #   --no-caddy          skip Caddy (e.g. you terminate HTTPS elsewhere)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DOMAIN="" DUCK_TOKEN="" BOT_TOKEN="" ADMIN="" FIREWALL=0 LAN="" CADDY=1
+DOMAIN="" DUCK_TOKEN="" BOT_TOKEN="" ADMIN="" FIREWALL=0 LAN="" CADDY=1 HTTPS_PORT=443
 while [ $# -gt 0 ]; do
     case "$1" in
         --domain) DOMAIN=${2%.duckdns.org}; shift ;;
@@ -25,14 +28,22 @@ while [ $# -gt 0 ]; do
         --admin) ADMIN=$2; shift ;;
         --firewall) FIREWALL=1 ;;
         --lan) LAN=$2; shift ;;
+        --https-port) HTTPS_PORT=$2; shift ;;
         --no-caddy) CADDY=0 ;;
-        -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
         *) echo "unknown option $1" >&2; exit 2 ;;
     esac
     shift
 done
 
 [ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
+[[ "$HTTPS_PORT" =~ ^[0-9]+$ ]] || { echo "--https-port must be a number" >&2; exit 2; }
+if [ "$HTTPS_PORT" != 443 ] && [ "$CADDY" = 1 ] && [ -z "$DUCK_TOKEN" ] && [ ! -f /etc/home/duckdns.env ]; then
+    echo "--https-port $HTTPS_PORT needs --duckdns-token (the certificate is obtained through DuckDNS DNS)" >&2
+    exit 2
+fi
+PORT_SUFFIX=""
+[ "$HTTPS_PORT" != 443 ] && PORT_SUFFIX=":$HTTPS_PORT"
 command -v apt-get >/dev/null || { echo "Debian/Ubuntu expected (apt-get)" >&2; exit 1; }
 case "$(uname -m)" in x86_64) ;; *) echo "warning: built and tested for x86_64, this is $(uname -m)" >&2 ;; esac
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
@@ -46,6 +57,12 @@ if [ "$CADDY" = 1 ] && ! command -v caddy >/dev/null; then
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
     apt-get update -q && apt-get install -y -q caddy >/dev/null
+fi
+if [ "$CADDY" = 1 ] && [ "$HTTPS_PORT" != 443 ] && ! caddy list-modules 2>/dev/null | grep -q '^dns.providers.duckdns'; then
+    # DNS challenge through DuckDNS: Caddy with the caddy-dns/duckdns module (held so apt does not replace it).
+    caddy add-package github.com/caddy-dns/duckdns >/dev/null
+    apt-mark hold caddy >/dev/null
+    echo "Caddy: duckdns DNS module installed (apt upgrades of caddy are held; to update: caddy upgrade)"
 fi
 fi
 
@@ -67,7 +84,7 @@ if [ -n "$BOT_TOKEN" ]; then
 fi
 if [ ! -f /etc/home/home.json ]; then
     PUBLIC=null
-    [ -n "$DOMAIN" ] && PUBLIC="\"https://$DOMAIN.duckdns.org\""
+    [ -n "$DOMAIN" ] && PUBLIC="\"https://$DOMAIN.duckdns.org$PORT_SUFFIX\""
     cat > /etc/home/home.json <<JSON
 {
   "Home": {
@@ -113,15 +130,38 @@ if [ -n "$DOMAIN" ]; then
         echo "no DuckDNS token: pass --duckdns-token"
     fi
     if [ "$CADDY" = 1 ]; then
-        cat > /etc/caddy/Caddyfile <<CADDY
+        install -d /etc/caddy
+        if [ "$HTTPS_PORT" = 443 ]; then
+            cat > /etc/caddy/Caddyfile <<CADDY
 $DOMAIN.duckdns.org {
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:8080
 }
 CADDY
+        else
+            # Port 443 belongs to another application: listen on $HTTPS_PORT only, never touch 80/443,
+            # get the certificate with a DNS record through the DuckDNS API.
+            cat > /etc/caddy/Caddyfile <<CADDY
+{
+	auto_https disable_redirects
+}
+
+$DOMAIN.duckdns.org:$HTTPS_PORT {
+	tls {
+		dns duckdns {env.DUCKDNS_TOKEN}
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}
+CADDY
+            install -d /etc/systemd/system/caddy.service.d
+            printf '[Service]\nEnvironmentFile=/etc/home/duckdns.env\n' > /etc/systemd/system/caddy.service.d/home-duckdns.conf
+            systemctl daemon-reload
+        fi
         systemctl enable caddy >/dev/null
         systemctl reload caddy 2>/dev/null || systemctl restart caddy
-        echo "Caddy serves https://$DOMAIN.duckdns.org (certificate appears once ports 80/443 are forwarded)"
+        if [ "$HTTPS_PORT" = 443 ]; then echo "Caddy serves https://$DOMAIN.duckdns.org (certificate appears once ports 80/443 are forwarded)"
+        else echo "Caddy serves https://$DOMAIN.duckdns.org:$HTTPS_PORT (forward TCP $HTTPS_PORT on the router; ports 80/443 are not used)"; fi
     fi
 fi
 
@@ -132,19 +172,25 @@ if [ "$FIREWALL" = 1 ]; then
         LAN=$(ip -4 route show dev "$DEV" scope link | awk '{print $1; exit}')
     fi
     [ -n "$LAN" ] || { echo "cannot detect the LAN, pass --lan" >&2; exit 1; }
-    sed "s|define LAN = .*|define LAN = $LAN|" deploy/nftables.conf.example > /etc/nftables.d-home.conf
+    PUBLIC_PORTS="80, 443"
+    [ "$HTTPS_PORT" != 443 ] && PUBLIC_PORTS="$HTTPS_PORT"
+    sed -e "s|define LAN = .*|define LAN = $LAN|" -e "s|tcp dport { 80, 443 } accept|tcp dport { $PUBLIC_PORTS } accept|" \
+        deploy/nftables.conf.example > /etc/nftables.d-home.conf
     grep -q 'nftables.d-home.conf' /etc/nftables.conf 2>/dev/null || echo 'include "/etc/nftables.d-home.conf"' >> /etc/nftables.conf
     nft -c -f /etc/nftables.conf && systemctl enable --now nftables >/dev/null && systemctl restart nftables
-    echo "firewall on: 22, 80, 443 open; 7700/8080 tcp and 5353/7701 udp only from $LAN"
+    echo "firewall on: 22, $PUBLIC_PORTS open; 7700/8080 tcp and 5353/7701 udp only from $LAN"
 fi
 
 say "done"
 IP=$(hostname -I | awk '{print $1}')
+URL="https://${DOMAIN:-<name>}.duckdns.org$PORT_SUFFIX"
+FORWARD="TCP 443 and 80"
+[ "$HTTPS_PORT" != 443 ] && FORWARD="TCP $HTTPS_PORT (external) → $IP:$HTTPS_PORT"
 cat <<TXT
 Next steps:
  1. Deploy the server from your computer:   scripts/deploy.sh <user>@$IP
- 2. Router: DHCP reservation for $IP; forward TCP 443 and 80 to $IP.
- 3. @BotFather: /newbot → token (--bot-token); Bot Settings → Menu Button → https://${DOMAIN:-<name>}.duckdns.org
+ 2. Router: DHCP reservation for $IP; forward $FORWARD.
+ 3. @BotFather: /newbot → token (--bot-token); Bot Settings → Menu Button → $URL
  4. First admin: --admin <telegram id> (the bot answers /id), or on this server: homectl users add <id> --role admin
- 5. Check: curl -s https://${DOMAIN:-<name>}.duckdns.org/healthz  → ok
+ 5. Check: curl -s $URL/healthz  → ok
 TXT

@@ -45,6 +45,8 @@
 2. **Релиз сервера** (на сервере или своём компьютере с .NET 10 и Node 22):
    `make deploy HOST=<user>@<ip-сервера>` (или `scripts/deploy.sh local` на самом сервере).
 3. **Роутер**: резервация IP сервера, проброс 443 и 80 на него. Проверка: `https://<имя>.duckdns.org/healthz` → `ok`.
+   Если 443 уже занят другим приложением — добавьте к `server-bootstrap.sh` флаг `--https-port 8443`,
+   пробросьте 8443 на сервер, адрес будет `https://<имя>.duckdns.org:8443`.
 4. **Бот**: в @BotFather → Bot Settings → Menu Button → `https://<имя>.duckdns.org`. Откройте бота → «Дом».
 5. **Плата**: `firmware/scripts/fw-build.sh board-probe && firmware/scripts/fw-flash-usb.sh board-probe && firmware/scripts/fw-monitor.sh`.
    Если всё найдено — `fw-build.sh co2-egg` и `fw-flash-usb.sh co2-egg`.
