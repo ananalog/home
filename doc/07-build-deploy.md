@@ -15,7 +15,7 @@
 /opt/home/releases/<version>/homectl        CLI
 /opt/home/current -> releases/<version>
 /usr/local/bin/homectl -> /opt/home/current/homectl
-/etc/home/appsettings.Production.json       конфиг (порты, путь БД, домен, настройки уведомлений)
+/etc/home/home.json                         конфиг (порты, путь БД, домен, админ, уведомления)
 /etc/home/secrets/bot_token                 0600, владелец home
 /etc/home/secrets/duckdns_token             0600, root
 /etc/caddy/Caddyfile                        reverse proxy + TLS
@@ -34,16 +34,17 @@ home/
   scripts/
     build-all.sh          собрать всё: протокол → сервер → прошивки → APK → dist/
     server-bootstrap.sh   подготовка чистого сервера (идемпотентно)
-    deploy.sh             выкладка релиза сервера + проверка + откат
+    deploy.sh             выкладка релиза сервера по SSH (или local)
+    remote-install.sh     часть деплоя, выполняемая на сервере: бэкап БД, симлинк, рестарт, health-check, откат
     fw-publish.sh         загрузить собранные прошивки на сервер (homectl fw upload)
     check-protocol.sh     все компоненты ссылаются на совместимую версию home-protocol
-    backup.sh             ручной бэкап/восстановление
+    backup.sh             бэкап БД и прошивок (ставится как /opt/home/bin/home-backup, ночной таймер)
   deploy/
     home.service                       systemd-юнит сервера
     home-backup.service / .timer       ночной бэкап
     duckdns.service / duckdns.timer    обновление IP в DuckDNS
     Caddyfile.example
-    appsettings.Production.json.example
+    home.json.example
     nftables.conf.example
   Makefile
 ```

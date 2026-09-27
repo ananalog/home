@@ -1,0 +1,6 @@
+[Unit]
+Description=Backup of the Home database and firmware images
+
+[Service]
+Type=oneshot
+ExecStart=/opt/home/bin/home-backup

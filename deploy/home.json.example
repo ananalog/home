@@ -1,0 +1,14 @@
+{
+  "Home": {
+    "DataDir": "/var/lib/home",
+    "HttpUrls": [ "http://127.0.0.1:8080" ],
+    "UnixSocket": "/run/home/api.sock",
+    "DevicePort": 7700,
+    "DiscoveryPort": 7701,
+    "PublicUrl": "https://myhome.duckdns.org",
+    "Telegram": { "BotTokenFile": "/etc/home/secrets/bot_token" },
+    "BootstrapAdmin": 123456789,
+    "OfflineAlertMinutes": 10,
+    "RawHistoryDays": 7
+  }
+}

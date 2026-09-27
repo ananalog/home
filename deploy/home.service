@@ -1,0 +1,41 @@
+[Unit]
+Description=Home server (devices, API, Telegram bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=home
+Group=home
+WorkingDirectory=/opt/home/current
+ExecStart=/opt/home/current/home-server
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=HOME_CONFIG=/etc/home/home.json
+# The single-file build unpacks native libraries (SQLite) here.
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/home/.net
+RuntimeDirectory=home
+RuntimeDirectoryMode=0750
+StateDirectory=home
+StateDirectoryMode=0750
+Restart=always
+RestartSec=3
+
+# Hardening (no MemoryDenyWriteExecute: .NET needs a JIT).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/home
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

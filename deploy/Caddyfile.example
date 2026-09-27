@@ -1,0 +1,6 @@
+# /etc/caddy/Caddyfile — HTTPS for the Mini App with automatic Let's Encrypt certificates.
+# Router: forward TCP 443 (and 80) to this server.
+myhome.duckdns.org {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+}

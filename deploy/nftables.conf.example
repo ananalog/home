@@ -1,0 +1,16 @@
+#!/usr/sbin/nft -f
+# Home server firewall. LAN = your home network (the bootstrap script fills it in).
+define LAN = 192.168.1.0/24
+
+table inet home {
+	chain input {
+		type filter hook input priority 0; policy drop;
+		ct state established,related accept
+		iif lo accept
+		meta l4proto { icmp, ipv6-icmp } accept
+		tcp dport 22 accept                          # SSH (not forwarded by the router)
+		tcp dport { 80, 443 } accept                 # Caddy: Mini App from the internet
+		ip saddr $LAN tcp dport { 7700, 8080 } accept  # devices; API for homectl in the LAN
+		ip saddr $LAN udp dport { 5353, 7701 } accept  # mDNS, device discovery
+	}
+}

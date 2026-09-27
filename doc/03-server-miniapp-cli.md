@@ -2,7 +2,7 @@
 
 ## Сервер (`home-server`)
 
-**C#, .NET 10 (LTS), ASP.NET Core.** Один процесс: HTTP API, SignalR, gateway устройств, бот, фоновые задачи.
+**C#, .NET 10 (LTS), ASP.NET Core.** Один процесс: HTTP API, живые события (SSE), gateway устройств, бот, фоновые задачи.
 Публикуется как self-contained single-file для `linux-x64` — на сервере .NET-рантайм ставить не нужно.
 
 ### Структура решения
@@ -19,9 +19,9 @@ home-server/
       Devices/                       реестр, принятие, точки
       Telemetry/                     приём REPORT, история, агрегации (BackgroundService)
       Ota/                           хранилище образов, парсинг дескриптора, задания раскатки
-      Api/                           Minimal API endpoints, SignalR Hub
+      Api/                           Minimal API endpoints, SSE-поток /api/v1/stream
       Auth/                          Telegram initData, токены CLI, роли
-      Bot/                           Telegram.Bot, long polling, уведомления
+      Bot/                           клиент Bot API, long polling, уведомления, OfflineMonitor
       Data/                          EF Core DbContext, миграции (SQLite)
       wwwroot/                       собранный Mini App (из web/miniapp)
     Home.Client/                     типизированный клиент API (используется CLI и тестами)
@@ -39,9 +39,10 @@ home-server/
 - **TCP-gateway в Kestrel**: `options.ListenAnyIP(7700, l => l.UseConnectionHandler<DeviceConnectionHandler>())`.
   Чтение фреймов через `PipeReader` без лишних аллокаций, одна `DeviceSession` на соединение,
   исходящие — через `Channel<T>`; запрос-ответ по `req_id` через `TaskCompletionSource` с таймаутом.
-- **Живые данные в Mini App** — SignalR-хаб `/hub`: значения, online/offline, прогресс OTA, события, логи.
+- **Живые данные** — `GET /api/v1/stream` (server-sent events): значения, online/offline, устройство, OTA, события;
+  `?logs=<id>` — ещё и логи устройства. Mini App читает через EventSource, `homectl watch` — тот же поток.
 - **Фоновые задачи** — `BackgroundService`: даунсэмплинг истории, OTA-раскатка, проверка «оффлайн > N минут», бэкап.
-- **Конфиг** — `appsettings.json` + `/etc/home/appsettings.Production.json` + переменные окружения;
+- **Конфиг** — `appsettings.json` рядом с бинарником + `/etc/home/home.json` (`HOME_CONFIG`) + переменные окружения `Home__…`;
   токен бота — из файла (`/etc/home/secrets/bot_token`).
 - **Логи** — стандартный `ILogger` → journald (systemd), при желании Serilog.
 
@@ -146,7 +147,7 @@ homectl users remove 123456789
 ## Mini App: экраны и UX
 
 Принципы: крупные плитки, минимум текста, тема Telegram (`themeParams`), нативные `BackButton`/`MainButton`,
-`HapticFeedback` при переключении, живые значения через SignalR, работа одной рукой.
+`HapticFeedback` при переключении, живые значения через SSE, работа одной рукой.
 
 1. **Дом** — вкладки комнат; плитки: главное значение крупно, цвет по порогам, переключатели прямо на плитке
    (оптимистичное обновление), серая плитка — оффлайн.
@@ -188,7 +189,7 @@ homectl fw status [<job>]
 homectl rooms list|add|remove
 homectl users list|add|remove|role|requests|approve|deny
 homectl tokens create|list|revoke
-homectl system status ; homectl backup ./home-backup.db
+homectl system status             # бэкап — sudo home-backup (скрипт, ночной таймер)
 homectl completion bash|zsh|fish
 ```
 

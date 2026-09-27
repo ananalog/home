@@ -1,0 +1,10 @@
+[Unit]
+Description=Update the DuckDNS record with the current public IP
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/home/duckdns.env
+ExecStart=/bin/sh -c 'r=$(curl -fsS --max-time 20 "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip="); [ "$r" = "OK" ] || { echo "duckdns: $r"; exit 1; }'
+DynamicUser=yes

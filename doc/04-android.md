@@ -6,10 +6,10 @@
 ## Стек
 
 - Kotlin, Jetpack Compose, Material 3, minSdk 26 (Android 8), targetSdk — актуальный.
-- BLE: **Nordic Android BLE Library** (очередь GATT-операций, MTU, повторы) +
-  Nordic Scanner Compat.
+- BLE: собственный слой поверх `BluetoothGatt` (очередь операций, MTU 247, уведомления) и `BluetoothLeScanner`
+  с фильтром по UUID сервиса.
 - Протокол: сгенерированные Kotlin-кодеки из `home-protocol` (git submodule / composite build).
-- Coroutines + Flow, DI — Hilt, DataStore для настроек.
+- Coroutines + Flow, ViewModel; логика протокола — в чистом Kotlin-модуле `core` (тесты на эмуляторе устройства).
 
 ## Разрешения
 
