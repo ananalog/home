@@ -19,7 +19,7 @@
 
 ```
 components/
-  home_proto/        сгенерированный кодек (зависимость на home-protocol через idf_component.yml)
+  (home_proto)       C-кодек из сабмодуля external/home-protocol/generated/c, подключается через EXTRA_COMPONENT_DIRS
   home_core/
     include/home.h   публичный API для устройств
     src/

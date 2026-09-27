@@ -118,7 +118,7 @@ ananalog/home                      ← этот репозиторий (зонт
 ### Как протокол попадает в компоненты
 
 Каждый компонент, которому нужен протокол, подключает `home-protocol` **своим** сабмодулем
-(`server/external/home-protocol`, `firmware/components/home_proto/…`, `android/external/home-protocol`),
+(`external/home-protocol` в `home-server`, `home-firmware` и `home-android`; в прошивке C-кодек из него подключается как компонент `home_proto`),
 чтобы собираться и отдельно от зонтика. В зонтике всё клонируется одной командой:
 
 ```

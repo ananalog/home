@@ -1,0 +1,16 @@
+[submodule "protocol"]
+	path = protocol
+	url = https://github.com/ananalog/home-protocol
+	branch = main
+[submodule "server"]
+	path = server
+	url = https://github.com/ananalog/home-server
+	branch = main
+[submodule "firmware"]
+	path = firmware
+	url = https://github.com/ananalog/home-firmware
+	branch = main
+[submodule "android"]
+	path = android
+	url = https://github.com/ananalog/home-android
+	branch = main
